@@ -1,7 +1,14 @@
 from deca.ff_rtpc import rtpc_from_binary, RtpcNode
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import date
+from pathlib import Path
+from enum import Enum
+import numpy as np
 import re
+import json
+
+animal_levels = json.load(Path("animal_levels.json").open())
+animal_diamonds = json.load(Path("animal_diamonds.json").open())
 
 class Animal:
   def __init__(self, name: str, data: RtpcNode) -> None:
@@ -23,27 +30,89 @@ class FurVariationGroup:
     self.furs = furs
 
 class AnimalScores:
-  def __init__(self, animal_name: str, gender: str, low_score: float, high_score: float, data_offset = None) -> None:
+  def __init__(self, animal_name: str, gender: str, low_score: float, high_score: float, low_weight: float, high_weight: float, data_offset = None) -> None:
     self.animal_name = animal_name
     self.gender = gender
     self.low_score = low_score
     self.high_score = high_score
+    self.low_weight = low_weight
+    self.high_weight = high_weight
     self.data_offset = data_offset
 
-class AnimalGroupScores:
-  def __init__(self, animal_name: str, scores: List[AnimalScores]) -> None:
-    self.animal_name = animal_name
-    self.scores = scores
+class Levels(int, Enum):
+  TRIVIAL = 1
+  MINOR = 2
+  VERY_EASY = 3
+  EASY = 4
+  MEDIUM = 5
+  HARD = 6
+  VERY_HARD = 7
+  MYTHICAL = 8
+  LEGENDARY = 9
 
+class AnimalGroupScores:
+  level_3_quantile = [0,.57,.95,1]
+  level_5_quantile = [0, 0.3, 0.6, 0.8, 0.92, 1]
+  level_9_quantile = [0,0.24,0.39,0.58,0.65,0.69,0.74,0.83,.9,1]
+  
+  def __init__(self, animal_name: str, gendered_scores: List[AnimalScores]) -> None:
+    self.animal_name = animal_name
+    self.gendered_scores = gendered_scores
+    self.level = animal_levels[animal_name]
+    self.diamond_low_score = animal_diamonds[animal_name]
+    self.diamond_high_score = None
+    self.diamond_low_weight = None    
+    self.diamond_high_weight = None    
+    self.level_values = None    
+    
+  def __repr__(self) -> str:
+    return f"{self.animal_name}({self.level})"
+  
+  def _lowest_score(self) -> float:
+    return min([x.low_score for x in self.gendered_scores])  
+  
+  def _highest_score(self) -> float:
+    return max([x.high_score for x in self.gendered_scores])  
+  
+  def _lowest_weight(self) -> float:
+    return min([x.low_weight for x in self.gendered_scores])  
+  
+  def _highest_weight(self) -> float:
+    return max([x.high_weight for x in self.gendered_scores])
+  
+  def update_levels(self) -> None:
+    lowest_weight = self._lowest_weight()
+    highest_weight = self._highest_weight()
+    self.diamond_high_score = round(self._highest_score(), 3)
+    self.diamond_high_weight = round(highest_weight, 3)
+    lowest_weight = round(lowest_weight * 100)
+    highest_weight = round(highest_weight * 100)    
+    if self.level == 5:
+      q = self.level_5_quantile      
+    elif self.level == 9:
+      q = self.level_9_quantile
+    else:
+      q = self.level_3_quantile
+    cuts = np.quantile(list(range(lowest_weight, highest_weight)), q=q)
+    self.diamond_low_weight = round(cuts[-2] / 100, 3)
+    level_values = []
+    for i in range(len(cuts) - 1):
+      level_values.append((round(cuts[i] / 100, 3), round(cuts[i+1] / 100, 3)))
+    self.level_values = level_values
+    
+    
 def _group_scores(scores: List[AnimalScores]) -> List[AnimalGroupScores]:
   groups = {}
   for score in scores:
     if score.animal_name in groups:
       existing = groups[score.animal_name]
-      existing.scores.append(score)
+      existing.gendered_scores.append(score)
     else:
       groups[score.animal_name] = AnimalGroupScores(score.animal_name, [score])
-  return groups.values()
+  groups = list(groups.values())
+  for group in groups:
+    group.update_levels()
+  return groups
 
 def _open_rtpc(filename: str) -> RtpcNode:
   with open(filename, 'rb') as f:
@@ -97,22 +166,80 @@ def _debug_variation(fur: FurVariation) -> None:
     fur.prob
   ))  
 
-def _show_group_scores(scores: List[AnimalGroupScores]) -> None:
-  print("###### ANIMAL SCORING ######n")
-  print(f"(captured on {date.today()})")
-  print("(does not include Great Ones)")
-  print(f"\n(gender, low_score, high_score)")
-  for score in scores:
-    print("\n",_format_name(score.animal_name))
-    for score_i in score.scores:
-      _pretty_scoring(score_i)
-
-def _pretty_scoring(score: AnimalGroupScores) -> None:  
-  print("%10s %8.2f %8.2f" % (
+def _pretty_scoring(score: AnimalScores) -> None:  
+  print("%10s %8.2f %8.2f %8.2f %8.2f" % (
     score.gender,
     score.low_score,
-    score.high_score
-  ))      
+    score.high_score,
+    score.low_weight,
+    score.high_weight
+  ))    
+
+def _pretty_levels(scores: AnimalGroupScores) -> None:
+  print("\n    *** DIFFICULTY RATINGS ***")
+  for i in range(scores.level):
+    print(f"{Levels(i+1).name:>19s}", end="")
+  print()
+
+  for i in range(scores.level):
+    x, y = scores.level_values[i]
+    value = f"({round(x,1)}, {round(y,1)})"
+    print(f"{value:>19s}", end="") 
+  print() 
+
+def _show_group_scores(group_scores: List[AnimalGroupScores]) -> None:
+  print("###### ANIMAL SCORING #######")
+  print(f"(captured on {date.today()})")
+  print("(does not include Great Ones)")
+  
+  for group_score in group_scores:
+    print("\n\n",f"{_format_name(group_score.animal_name)}")
+    print("    *** GENERAL INFORMATION ***")
+    print(f"    LEVEL: {group_score.level}")
+    print(f"    Diamond Weight: {group_score.diamond_low_weight}")
+    print(f"    Diamond Score: {group_score.diamond_low_score}")
+    print()
+    print("%10s %8s %8s %8s %8s" % (
+      "gender",
+      "l_score",
+      "h_score",
+      "l_weight",
+      "h_weight"
+    ))       
+    print("%10s %8s %8s %8s %8s" % (
+      "======",
+      "========",
+      "========",
+      "========",
+      "========"
+    ))          
+    for score in group_score.gendered_scores:
+      _pretty_scoring(score)  
+    print()
+    _pretty_levels(group_score)
+
+def _create_animal_level_dict(scores: List[AnimalGroupScores]) -> None:
+  levels = {}
+  for score in scores:
+    levels[score.animal_name] = 0
+  return levels
+
+def _create_animal_details(group_score: AnimalGroupScores) -> dict:
+  return {
+    "diamonds": {
+      "score_low": group_score.diamond_low_score,
+      "score_high": group_score.diamond_high_score,
+      "weight_low": group_score.diamond_low_weight,
+      "weight_high": group_score.diamond_high_weight,
+      "furs": {}
+    }
+  }
+
+def _create_all_animal_details(group_scores: List[AnimalGroupScores]) -> dict:
+  animal_details = {}
+  for group_score in group_scores:
+    animal_details[group_score.animal_name] = _create_animal_details(group_score)
+  return animal_details
 
 def _find_child_node(tables: List[RtpcNode], class_name: str, index: int = 0) -> Optional[RtpcNode]:
   for child in tables:
@@ -178,6 +305,8 @@ def _process_scores(animals: List[Animal], only_animal: str = None, debug = Fals
     LOW_SCORE_INDEX = 0
     HIGH_SCORE_INDEX = 11
     SCORE_TYPE_INDEX = 9
+    LOW_WEIGHT_INDEX = 5
+    HIGH_WEIGHT_INDEX = 2
     MALE_TYPE = re.compile(r"^male_", re.RegexFlag.I)
     FEMALE_TYPE = re.compile(r"^female_", re.RegexFlag.I)
     GO_TYPE = re.compile(r".*greatone.*", re.RegexFlag.I)
@@ -196,7 +325,9 @@ def _process_scores(animals: List[Animal], only_animal: str = None, debug = Fals
           continue
       low_score = distribution_setting.prop_table[LOW_SCORE_INDEX].data
       high_score = distribution_setting.prop_table[HIGH_SCORE_INDEX].data
-      scores = AnimalScores(animal.name, gender, low_score, high_score, distribution_setting.data_offset)
+      low_weight = distribution_setting.prop_table[LOW_WEIGHT_INDEX].data
+      high_weight = distribution_setting.prop_table[HIGH_WEIGHT_INDEX].data
+      scores = AnimalScores(animal.name, gender, low_score, high_score, low_weight, high_weight, distribution_setting.data_offset)
       animal_scores.append(scores)
   return _sort_animals(animal_scores)
 
@@ -321,8 +452,12 @@ def _process_fur_variations(animals: List[Animal], only_animal: str = None, debu
 if __name__ == "__main__":
   animal_list = _open_rtpc("global_animal_types.blo")
   animals = _get_animals(animal_list, True)
-  fur_variations = _process_fur_variations(animals, debug=False)
-  _show_group_furs(fur_variations)
-  # scores = _process_scores(animals, debug=False)
-  # scores = _group_scores(scores)
-  # _show_group_scores(scores)
+  # fur_variations = _process_fur_variations(animals, debug=False)
+  # _show_group_furs(fur_variations)
+  # scores = _process_scores(animals, only_animal="wild_turkey", debug=False)
+  scores = _process_scores(animals, debug=False)
+  scores = _group_scores(scores)
+  animal_details = _create_all_animal_details(scores)
+  # Path("animal_details.json").write_text(json.dumps(animal_details, indent=2))
+  _show_group_scores(scores)  
+  # Path("levels/global_animals.json").write_text(json.dumps(_create_animal_level_dict(scores), indent=2))  

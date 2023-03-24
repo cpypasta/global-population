@@ -1,0 +1,88 @@
+LEVEL 3
+Whitetail Deer
+Musk Deer
+Roe Deer
+Antelope Jackrabbit
+Jackrabbit
+Scrub Hare
+Mountain Hare
+Eu Hare
+Eu Rabbit
+Eastern Cottontail Rabbit
+Mallard
+Cinnamon Teal
+Eurasian Teal
+Eurasian Wigeon
+Harlequin Duck
+Goldeneye
+Tufted Duck
+Rio Grande Turkey
+Eastern Wild Turkey
+wild Turkey
+Black Grouse
+Hazel Grouse
+Northern Bobwhite Quail
+Pheasant
+Rock Ptarmigan
+Willow Ptarmigan
+Western Capercaillie
+Siberian Musk Deer
+Green Wing Teal
+LEVEL 5
+Blacktail Deer
+Axis Deer
+Mule Deer
+Sika Deer
+Fallow Deer
+Moose
+Reindeer
+Caribou
+Blue Wildebeest
+Gemsbok
+Lesser Kudu
+Springbok
+BlackBuck
+Prong horn
+Chamois
+Roosevelt Elk
+RockyMountain Elk
+Warthog
+Wild Boar
+Collared Peccary
+Feral Pig
+Canada Goose
+Greylag Goose
+Tundra Bean Goose
+Eu Bison
+Plains Bison
+Iberian Mouflon
+Beceite Ibex
+Gredos Ibex
+Ronda Ibex
+southeastern Ibex
+Bighorn Sheep
+Mountain Goat
+Feral Goat
+Raccoon
+LEVEL 9
+Red Deer
+Coyote
+Side-Striped Jackal
+Red Fox
+Gray Fox
+Eurasian Lynx
+Mexican Bobcat
+Bobcat
+Raccoon Dog
+Iberian Wolf
+Gray Wolf
+Puma 
+Mountain Lion
+Lion
+Cape Buffalo
+Water Buffalo
+Eurasian Lynx
+Eurasian Brown Bear
+Black Bear
+Grizzly Bear
+American Alligator
